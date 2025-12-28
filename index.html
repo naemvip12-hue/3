@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task Pay Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<!-- Telegram WebApp -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<!-- Monetag SDK -->
+<script src="//libtl.com/sdk.js"
+        data-zone="10387801"
+        data-sdk="show_10387801"></script>
+
+<style>
+body{
+  margin:0;
+  background:#0e1228;
+  font-family:Arial,Helvetica,sans-serif;
+  color:#fff;
+}
+.app{
+  max-width:420px;
+  margin:auto;
+  padding:20px;
+}
+.card{
+  background:#1a1f4a;
+  border-radius:18px;
+  padding:20px;
+  margin-bottom:15px;
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+}
+h1{margin:0 0 10px;font-size:24px;text-align:center}
+.small{font-size:13px;opacity:.8;text-align:center}
+.balance{
+  font-size:34px;
+  text-align:center;
+  margin:10px 0;
+}
+.btn{
+  width:100%;
+  padding:14px;
+  font-size:17px;
+  border:none;
+  border-radius:14px;
+  font-weight:bold;
+  cursor:pointer;
+  background:linear-gradient(135deg,#6a5cff,#8b7bff);
+  color:#fff;
+}
+.btn:disabled{opacity:.5}
+.row{
+  display:flex;
+  justify-content:space-between;
+  font-size:14px;
+}
+input{
+  width:100%;
+  padding:12px;
+  border-radius:10px;
+  border:none;
+  margin-top:10px;
+}
+.status{
+  text-align:center;
+  font-size:14px;
+  margin-top:10px;
+  opacity:.9;
+}
+.ref{
+  word-break:break-all;
+  background:#0e1333;
+  padding:10px;
+  border-radius:10px;
+  font-size:13px;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<h1>🐸 Task Pay</h1>
+<div class="small" id="userInfo">Loading...</div>
+
+<div class="card">
+  <div class="balance" id="bal">0.00 USDT</div>
+  <div class="row">
+    <span>Total Ads</span>
+    <span id="ads">0</span>
+  </div>
+  <div class="row">
+    <span>Today</span>
+    <span id="today">0 / 100</span>
+  </div>
+</div>
+
+<div class="card">
+  <button class="btn" id="watch">▶ WATCH AD</button>
+  <div class="status" id="status">Ready</div>
+</div>
+
+<div class="card">
+  <h3>💸 Withdraw</h3>
+  <input id="wallet" placeholder="USDT TRC20 Address">
+  <button class="btn" id="withdraw">Withdraw</button>
+</div>
+
+<div class="card">
+  <h3>👥 Referral</h3>
+  <div class="ref" id="ref">Loading...</div>
+</div>
+
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const ADMIN_ID = 7589583468;
+const BOT_USERNAME = "Task_Pay_Bot";
+const DAILY_LIMIT = 100;
+const COOLDOWN = 30; // seconds
+const AD_REWARD = 1; // cent = 0.01 USDT
+
+/* ================= TELEGRAM ================= */
+const tg = window.Telegram.WebApp;
+tg.ready(); tg.expand();
+const user = tg.initDataUnsafe.user;
+
+/* ================= STATE ================= */
+let data = JSON.parse(localStorage.getItem("taskpay")) || {
+  bal:0, ads:0, today:0, lastDay:"", lastAd:0
+};
+
+function save(){ localStorage.setItem("taskpay",JSON.stringify(data)); }
+
+/* ================= DAILY RESET ================= */
+function resetDaily(){
+  const d = new Date().toDateString();
+  if(data.lastDay !== d){
+    data.today = 0;
+    data.lastDay = d;
+    save();
+  }
+}
+resetDaily();
+
+/* ================= UI ================= */
+function updateUI(){
+  document.getElementById("bal").innerText = (data.bal/100).toFixed(2)+" USDT";
+  document.getElementById("ads").innerText = data.ads;
+  document.getElementById("today").innerText = data.today+" / "+DAILY_LIMIT;
+}
+updateUI();
+
+document.getElementById("userInfo").innerText =
+  user ? `@${user.username || user.first_name} | ID: ${user.id}` : "User";
+
+/* ================= WATCH AD ================= */
+document.getElementById("watch").onclick = ()=>{
+  resetDaily();
+
+  if(data.today >= DAILY_LIMIT){
+    status.innerText = "Daily limit reached";
+    return;
+  }
+
+  const now = Date.now();
+  if(now - data.lastAd < COOLDOWN*1000){
+    status.innerText = "Wait cooldown...";
+    return;
+  }
+
+  if(typeof show_10387801 !== "function"){
+    status.innerText = "Ad not ready";
+    return;
+  }
+
+  status.innerText = "Loading ad...";
+  show_10387801().then(()=>{
+    data.bal += AD_REWARD;
+    data.ads++;
+    data.today++;
+    data.lastAd = Date.now();
+    save();
+    updateUI();
+    status.innerText = "Ad watched ✅";
+  }).catch(()=>{
+    status.innerText = "Ad failed ❌";
+  });
+};
+
+/* ================= WITHDRAW ================= */
+document.getElementById("withdraw").onclick = ()=>{
+  if(data.bal < 1000){
+    alert("Minimum 10 USDT");
+    return;
+  }
+  const w = wallet.value.trim();
+  if(!w.startsWith("T")){
+    alert("Invalid TRC20 address");
+    return;
+  }
+
+  tg.sendData(
+`WITHDRAW REQUEST
+Bot: @Task_Pay_Bot
+User ID: ${user.id}
+Username: @${user.username || "N/A"}
+Amount: ${(data.bal/100).toFixed(2)} USDT
+Wallet: ${w}`
+  );
+
+  data.bal = 0;
+  save();
+  updateUI();
+  alert("Withdraw request sent");
+};
+
+/* ================= REFERRAL ================= */
+const refLink = `https://t.me/${BOT_USERNAME}?start=${user.id}`;
+document.getElementById("ref").innerText = refLink;
+document.getElementById("ref").onclick = ()=>{
+  navigator.clipboard.writeText(refLink);
+  alert("Referral copied");
+};
+</script>
+</body>
+</html>
